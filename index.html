@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f8f7f3" />
+  <meta name="description" content="Seu atlas pessoal: lugares que você conheceu e os próximos da lista." />
+  <title>por aí — seu atlas pessoal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Navegação principal">
+      <div class="brand"><span class="brand-icon">✳</span><span>por aí<span class="brand-dot">.</span></span></div>
+      <p class="side-caption">SEU ESPAÇO</p>
+      <nav class="side-nav">
+        <button class="nav-item active" data-view="home"><span class="nav-icon">◫</span> Visão geral</button>
+        <button class="nav-item" data-view="explore"><span class="nav-icon">◎</span> Explorar países</button>
+        <button class="nav-item" data-view="lists"><span class="nav-icon">▤</span> Minhas listas</button>
+      </nav>
+      <div class="sidebar-bottom"><div class="side-art"><span>✦</span><p>o mundo é grande.<br>comece por algum lugar.</p></div><span class="side-foot">FEITO PARA SONHAR MAIS LONGE ↗</span></div>
+    </aside>
+    <main class="main-content">
+      <header class="topbar"><div class="mobile-brand">✳ <b>por aí<span class="brand-dot">.</span></b></div><span class="topbar-label">SEU ATLAS PESSOAL</span><button id="dataButton" class="icon-button" title="Exportar ou importar seus dados" aria-label="Exportar ou importar seus dados">↥</button></header>
+      <section id="homeView" class="view">
+        <div class="page-heading"><span class="eyebrow">O MUNDO É SEU</span><h1>Pra onde a vida<br><em>te leva?</em></h1><p>Um lugar para guardar as viagens que já aconteceram e sonhar com as próximas.</p></div>
+        <div class="hero-card"><div class="hero-overlay"><div class="hero-tag">✦ SEU PRÓXIMO CAPÍTULO</div><h2>O mapa não é o<br>território. <i>Vai viver.</i></h2><p>195 países. Infinitas histórias para contar.</p><button class="hero-cta" data-go="explore">Explorar o mundo <span>↗</span></button></div><span class="hero-credit">UMA VIDA, MUITOS DESTINOS</span></div>
+        <div class="section-title"><div><span class="eyebrow">UM POUCO DE VOCÊ</span><h2>Sua jornada até aqui</h2></div></div>
+        <div class="stats-grid"><div class="stat-card"><span class="stat-icon coral">✈</span><strong id="visitedCount">0</strong><span>países visitados</span><small>histórias que já são suas</small></div><div class="stat-card"><span class="stat-icon lavender">✧</span><strong id="dreamCount">0</strong><span>na lista de desejos</span><small>aventuras no horizonte</small></div><div class="stat-card"><span class="stat-icon mint">◉</span><strong id="regionCount">0/5</strong><span>regiões exploradas</span><small>um mundo pela frente</small></div></div>
+        <div class="home-lower"><div class="panel"><div class="panel-head"><div><span class="eyebrow">SEUS PLANOS</span><h3>No topo da lista</h3></div><button class="text-link" data-go="lists">Ver listas ↗</button></div><div id="topDreams" class="mini-list"></div></div><div class="panel regions-panel"><div class="panel-head"><div><span class="eyebrow">PELO MUNDO</span><h3>Suas regiões</h3></div></div><div id="regionProgress"></div></div></div>
+      </section>
+      <section id="exploreView" class="view hidden"><div class="page-heading compact"><span class="eyebrow">O MUNDO INTEIRO</span><h1>Explore <em>sem limites.</em></h1><p>Encontre seu próximo destino, ou marque um lugar que já mora na sua memória.</p></div><div class="toolbar"><label class="search-box"><span>⌕</span><input id="searchInput" type="search" placeholder="Buscar país ou capital..." autocomplete="off" /></label><select id="statusFilter" aria-label="Filtrar por status"><option value="all">Todos os países</option><option value="visited">Já visitei</option><option value="dream">Quero visitar</option><option value="none">Ainda não marquei</option></select></div><div id="regionTabs" class="region-tabs" role="group" aria-label="Filtrar por região"></div><div class="result-line"><span id="resultCount"></span><span>TOQUE PARA ADICIONAR À SUA JORNADA</span></div><div id="countryGrid" class="country-grid"></div><div id="emptyExplore" class="empty-state hidden"><span>⌕</span><h3>Nenhum lugar por aqui</h3><p>Tente outra busca ou filtro.</p></div></section>
+      <section id="listsView" class="view hidden"><div class="page-heading compact"><span class="eyebrow">HISTÓRIAS & PLANOS</span><h1>Minhas <em>listas.</em></h1><p>Cada destino tem seu tempo. Organize os seus do seu jeito.</p></div><div id="listTabs" class="list-tabs"><button class="active" data-list="visited">✈ Já fui <span id="visitedTabCount">0</span></button><button data-list="dream">✧ Quero ir <span id="dreamTabCount">0</span></button></div><div id="tierFilter" class="tier-filter hidden"></div><div id="listContent" class="list-content"></div></section>
+      <footer class="footer">feito pra quem nunca para de imaginar o próximo lugar. <span>✳ por aí.</span></footer>
+    </main>
+    <nav class="bottom-nav" aria-label="Navegação principal"><button class="active" data-view="home"><span>◫</span>Início</button><button data-view="explore"><span>◎</span>Explorar</button><button data-view="lists"><span>▤</span>Listas</button></nav>
+  </div>
+  <dialog id="countryDialog" class="country-dialog"><form method="dialog" id="countryForm"><button class="dialog-close" value="cancel" aria-label="Fechar">×</button><div class="dialog-flag" id="dialogFlag"></div><span class="eyebrow" id="dialogRegion"></span><h2 id="dialogName"></h2><p class="dialog-sub" id="dialogSub"></p><div class="dialog-section"><label class="field-label">ONDE ESSE LUGAR ENTRA NA SUA HISTÓRIA?</label><div class="status-options"><button type="button" data-status="visited">✈ <span>Já visitei</span></button><button type="button" data-status="dream">✧ <span>Quero visitar</span></button><button type="button" data-status="none">○ <span>Ainda não</span></button></div></div><div id="tierSection" class="dialog-section hidden"><label class="field-label" for="tierSelect">QUANTO VOCÊ QUER IR?</label><select id="tierSelect"><option value="muito">🔥 Quero muito!</option><option value="um-dia">🌤️ Um dia eu vou</option><option value="se-der">🍃 Se der certo, eu topo</option></select></div><div id="yearSection" class="dialog-section hidden"><label class="field-label" for="yearInput">EM QUE ANO VOCÊ FOI? (OPCIONAL)</label><input id="yearInput" type="number" min="1900" max="2100" placeholder="Ex.: 2024" /></div><div id="noteSection" class="dialog-section hidden"><label class="field-label" for="noteInput">UMA NOTA PRA VOCÊ (OPCIONAL)</label><textarea id="noteInput" maxlength="500" placeholder="O que te marcou ou o que você quer fazer por lá?"></textarea></div><button id="saveCountry" type="submit" value="save" class="save-button">Salvar na minha jornada ↗</button></form></dialog>
+  <dialog id="dataDialog" class="data-dialog"><button class="dialog-close" id="closeData" aria-label="Fechar">×</button><span class="eyebrow">SEUS DADOS, SUAS MEMÓRIAS</span><h2>Leve seu atlas com você.</h2><p>Seus países ficam salvos neste navegador. Exporte um arquivo para guardar ou importar em outro dispositivo.</p><div class="data-actions"><button id="exportButton">↓ Exportar meus dados</button><label class="import-label">↑ Importar arquivo<input id="importInput" type="file" accept="application/json,.json" hidden /></label></div><p class="data-warning">Importar substitui as marcações deste dispositivo.</p></dialog>
+  <script src="app.js" defer></script>
+</body>
+</html>

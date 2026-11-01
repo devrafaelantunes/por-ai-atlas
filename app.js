@@ -1,0 +1,60 @@
+const STORAGE_KEY = 'porai-atlas-v1';
+const REGIONS = { Europe: 'Europa', Asia: 'Ásia', Africa: 'África', Americas: 'Américas', Oceania: 'Oceania' };
+const REGION_ICONS = { Europe: '✦', Asia: '◈', Africa: '☼', Americas: '◉', Oceania: '〰' };
+const TIERS = { muito: '🔥 Quero muito!', 'um-dia': '🌤️ Um dia eu vou', 'se-der': '🍃 Se der certo' };
+let countries = [], entries = {}, currentView = 'home', currentRegion = 'all', currentList = 'visited', currentTier = 'all', selectedCountry = null, selectedStatus = 'none';
+const $ = id => document.getElementById(id);
+const clean = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const entry = code => entries[code] || { status: 'none', tier: 'muito', note: '', year: '' };
+function loadEntries() { try { const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch { return {}; } }
+function persist() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); return true; } catch { toast('Não foi possível salvar neste navegador. Exporte seus dados.'); return false; } }
+function toast(message) { const old = document.querySelector('.toast'); if (old) old.remove(); const el = document.createElement('div'); el.className = 'toast'; el.setAttribute('role','status'); el.textContent = message; document.body.append(el); setTimeout(() => el.remove(), 3200); }
+function navigate(view) { currentView = view; document.querySelectorAll('.view').forEach(el => el.classList.toggle('hidden', el.id !== `${view}View`)); document.querySelectorAll('[data-view]').forEach(el => el.classList.toggle('active', el.dataset.view === view)); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+function render() { if (currentView === 'home') renderHome(); if (currentView === 'explore') renderExplore(); if (currentView === 'lists') renderLists(); }
+function renderHome() {
+  const visited = countries.filter(c => entry(c.code).status === 'visited');
+  const dreams = countries.filter(c => entry(c.code).status === 'dream');
+  $('visitedCount').textContent = visited.length; $('dreamCount').textContent = dreams.length;
+  $('regionCount').textContent = `${new Set(visited.map(c => c.region)).size}/5`;
+  const sorted = dreams.sort((a,b) => Object.keys(TIERS).indexOf(entry(a.code).tier) - Object.keys(TIERS).indexOf(entry(b.code).tier) || a.name.localeCompare(b.name,'pt-BR')).slice(0,3);
+  $('topDreams').innerHTML = sorted.length ? sorted.map(c => `<div class="mini-row" data-country="${c.code}" role="button" tabindex="0"><span class="flag">${c.flag}</span><span><b>${escapeHtml(c.name)}</b><small>${TIERS[entry(c.code).tier] || TIERS.muito}</small></span><span class="arrow">↗</span></div>`).join('') : '<p class="empty-mini">Sua próxima aventura começa aqui. Escolha um país que você sonha conhecer. ✨</p>';
+  $('regionProgress').innerHTML = Object.keys(REGIONS).map(r => { const n = visited.filter(c => c.region === r).length; const total = countries.filter(c => c.region === r).length; return `<div class="region-row"><span>${REGIONS[r]}</span><div class="progress-track"><div class="progress-fill" style="width:${n/total*100}%"></div></div><b>${n}</b></div>`; }).join('');
+}
+function renderExplore() {
+  $('regionTabs').innerHTML = [['all','Todos'],...Object.entries(REGIONS)].map(([key,label]) => `<button data-region="${key}" class="${currentRegion===key?'active':''}">${key==='all'?'✳':REGION_ICONS[key]} ${label}</button>`).join('');
+  const q = clean($('searchInput').value.trim()), status = $('statusFilter').value;
+  const shown = countries.filter(c => (currentRegion==='all'||c.region===currentRegion) && (status==='all'||entry(c.code).status===status) && (!q||clean(`${c.name} ${c.english} ${c.capital}`).includes(q)));
+  $('resultCount').textContent = `${shown.length} ${shown.length===1?'PAÍS ENCONTRADO':'PAÍSES ENCONTRADOS'}`;
+  $('countryGrid').innerHTML = shown.map(c => { const s = entry(c.code).status; return `<button class="country-card" data-country="${c.code}" aria-label="${escapeHtml(c.name)}, ${s==='visited'?'já visitei':s==='dream'?'quero visitar':'sem marcação'}"><span class="card-flag">${c.flag}</span>${s==='visited'?'<span class="card-badge badge-visited">✓ JÁ FUI</span>':s==='dream'?'<span class="card-badge badge-dream">✧ QUERO IR</span>':''}<span class="card-name">${escapeHtml(c.name)}</span><span class="card-region">${REGIONS[c.region]}</span></button>`; }).join('');
+  $('emptyExplore').classList.toggle('hidden', shown.length !== 0);
+}
+function renderLists() {
+  const visited = countries.filter(c => entry(c.code).status==='visited'); const dreams = countries.filter(c => entry(c.code).status==='dream');
+  $('visitedTabCount').textContent = visited.length; $('dreamTabCount').textContent = dreams.length;
+  document.querySelectorAll('[data-list]').forEach(el => el.classList.toggle('active',el.dataset.list===currentList));
+  $('tierFilter').classList.toggle('hidden',currentList!=='dream');
+  $('tierFilter').innerHTML = [['all','Todos'],...Object.entries(TIERS)].map(([key,label]) => `<button data-tier="${key}" class="${currentTier===key?'active':''}">${label}</button>`).join('');
+  const list = currentList==='visited'?visited.sort((a,b)=>(Number(entry(b.code).year)||0)-(Number(entry(a.code).year)||0)||a.name.localeCompare(b.name,'pt-BR')):dreams;
+  if (!list.length) { $('listContent').innerHTML = `<div class="empty-state"><span>${currentList==='visited'?'✈':'✧'}</span><h3>${currentList==='visited'?'Sua história começa aqui':'O próximo destino te espera'}</h3><p>${currentList==='visited'?'Marque os países que você já conheceu.':'Adicione países à sua lista de desejos.'}</p><button data-go="explore">Explorar países ↗</button></div>`; return; }
+  if (currentList==='visited') { $('listContent').innerHTML = list.map(c => listRow(c)).join(''); return; }
+  const tiers = currentTier==='all'?Object.keys(TIERS):[currentTier];
+  const html = tiers.map(t => { const group = list.filter(c => entry(c.code).tier===t).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')); return group.length ? `<h3 class="tier-heading">${TIERS[t]} <small>${group.length} ${group.length===1?'país':'países'}</small></h3>${group.map(c=>listRow(c)).join('')}` : ''; }).join('');
+  $('listContent').innerHTML = html || '<div class="empty-state"><span>✧</span><h3>Nada neste tier ainda</h3><p>Escolha outro nível de vontade ou adicione mais destinos.</p></div>';
+}
+function listRow(c) { const e = entry(c.code); return `<div class="list-row" data-country="${c.code}" role="button" tabindex="0"><span class="flag">${c.flag}</span><div class="info"><b>${escapeHtml(c.name)}</b><small>${REGIONS[c.region]}${e.year&&e.status==='visited'?' · '+escapeHtml(e.year):''}${e.note?' · '+escapeHtml(e.note):''}</small></div><span class="row-end">↗</span></div>`; }
+function setStatus(status) { selectedStatus = status; document.querySelectorAll('[data-status]').forEach(el => el.classList.toggle('selected',el.dataset.status===status)); $('tierSection').classList.toggle('hidden',status!=='dream'); $('yearSection').classList.toggle('hidden',status!=='visited'); $('noteSection').classList.toggle('hidden',status==='none'); }
+function openCountry(code) { const c = countries.find(x=>x.code===code); if (!c) return; selectedCountry=c; const e=entry(code); $('dialogFlag').textContent=c.flag; $('dialogRegion').textContent=REGIONS[c.region]+' · '+c.subregion; $('dialogName').textContent=c.name; $('dialogSub').textContent=c.capital?`Capital: ${c.capital}`:'Um destino para descobrir.'; $('tierSelect').value=TIERS[e.tier]?e.tier:'muito'; $('yearInput').value=e.year||''; $('noteInput').value=e.note||''; setStatus(['visited','dream'].includes(e.status)?e.status:'none'); $('countryDialog').showModal(); }
+function saveCountry(event) { event.preventDefault(); if (!selectedCountry) return; const code=selectedCountry.code; if (selectedStatus==='none') delete entries[code]; else { const year=$('yearInput').value.trim(); if (selectedStatus==='visited' && year && (Number(year)<1900||Number(year)>2100)) { toast('Digite um ano entre 1900 e 2100.'); return; } entries[code]={status:selectedStatus,tier:selectedStatus==='dream'?$('tierSelect').value:'muito',year:selectedStatus==='visited'?year:'',note:$('noteInput').value.trim().slice(0,500)}; } persist(); $('countryDialog').close(); render(); toast(selectedStatus==='none'?'País removido da sua jornada.':'Seu atlas foi atualizado!'); }
+function exportData() { const blob=new Blob([JSON.stringify({app:'por-ai',version:1,exportedAt:new Date().toISOString(),entries},null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='por-ai-meu-atlas.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
+async function importData(file) { try { if (file.size>2_000_000) throw Error('Arquivo grande demais.'); const data=JSON.parse(await file.text()); if (data.app!=='por-ai'||data.version!==1||!data.entries||typeof data.entries!=='object'||Array.isArray(data.entries)) throw Error('Este arquivo não é um backup válido do por aí.'); const validCodes=new Set(countries.map(c=>c.code)), next={}; for (const [code,item] of Object.entries(data.entries)) { if (!validCodes.has(code)||!item||!['visited','dream'].includes(item.status)) continue; next[code]={status:item.status,tier:TIERS[item.tier]?item.tier:'muito',year:/^(19|20)\d{2}$/.test(String(item.year||''))?String(item.year):'',note:String(item.note||'').slice(0,500)}; } if (!confirm(`Importar ${Object.keys(next).length} países? Isso substitui suas marcações atuais neste dispositivo.`)) return; entries=next; persist(); $('dataDialog').close(); render(); toast('Seu atlas foi importado!'); } catch(err) { toast(err.message||'Não foi possível importar o arquivo.'); } finally { $('importInput').value=''; } }
+async function init() {
+  entries=loadEntries();
+  try { const response=await fetch('countries.json'); if (!response.ok) throw Error('Falha ao carregar países'); countries=await response.json(); if (!Array.isArray(countries)||countries.length!==195) throw Error('Lista incompleta'); render(); }
+  catch { document.querySelector('.page-heading').insertAdjacentHTML('afterend','<div class="error-banner">Não foi possível carregar a lista de países. Verifique a conexão e <button onclick="location.reload()">tente de novo</button>.</div>'); }
+  document.addEventListener('click',event=>{ const go=event.target.closest('[data-go]'); if(go){navigate(go.dataset.go);return;} const nav=event.target.closest('[data-view]'); if(nav){navigate(nav.dataset.view);return;} const country=event.target.closest('[data-country]'); if(country){openCountry(country.dataset.country);return;} const region=event.target.closest('[data-region]'); if(region){currentRegion=region.dataset.region;renderExplore();return;} const list=event.target.closest('[data-list]'); if(list){currentList=list.dataset.list;currentTier='all';renderLists();return;} const tier=event.target.closest('[data-tier]'); if(tier){currentTier=tier.dataset.tier;renderLists();return;} const status=event.target.closest('[data-status]'); if(status)setStatus(status.dataset.status); });
+  document.addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)&&event.target.matches('[data-country][role="button"]')){event.preventDefault();openCountry(event.target.dataset.country);}});
+  $('searchInput').addEventListener('input',renderExplore); $('statusFilter').addEventListener('change',renderExplore); $('countryForm').addEventListener('submit',saveCountry);
+  $('dataButton').addEventListener('click',()=>$('dataDialog').showModal()); $('closeData').addEventListener('click',()=>$('dataDialog').close()); $('exportButton').addEventListener('click',exportData); $('importInput').addEventListener('change',e=>e.target.files[0]&&importData(e.target.files[0]));
+}
+init();
