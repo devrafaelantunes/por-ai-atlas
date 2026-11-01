@@ -3,7 +3,7 @@ const REGIONS = { Europe: 'Europa', Asia: 'Ásia', Africa: 'África', Americas: 
 const REGION_ICONS = { Europe: '✦', Asia: '◈', Africa: '☼', Americas: '◉', Oceania: '〰' };
 const TIERS = { muito: '🔥 Quero muito!', 'um-dia': '🌤️ Um dia eu vou', 'se-der': '🍃 Se der certo' };
 let countries = [], entries = {}, currentView = 'home', currentRegion = 'all', currentList = 'visited', currentTier = 'all', selectedCountry = null, selectedStatus = 'none';
-let cloud = null, deviceUid = null, ownerUid = null, connected = false, syncing = false, stopEntries = null, stopMember = null, stopRequests = null;
+let cloud = null, deviceUid = null, ownerUid = null, connected = false, syncing = false, stopEntries = null, stopMember = null, stopRequests = null, refreshingRequests = false;
 const $ = id => document.getElementById(id);
 const clean = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -30,16 +30,27 @@ async function connectCloud() {
   } catch(error) { console.error('Conexão ao atlas',error);syncStatus('Falha na sincronização · dados locais preservados'); }
   finally { syncing=false; }
 }
+function renderRequests(requests) {
+  $('pendingRequests').innerHTML=requests.length?requests.map(request=>`<div class="pair-request"><span>Código <b>${escapeHtml(request.code)}</b></span><button type="button" data-approve="${escapeHtml(request.uid)}">Autorizar aparelho</button></div>`).join(''):'Nenhum aparelho aguardando.';
+}
+async function refreshRequests() {
+  if (!cloud || !ownerUid || refreshingRequests) return;
+  refreshingRequests=true;
+  try {renderRequests(await cloud.listRequests(ownerUid));}
+  catch(error){console.error('Atualização dos pedidos',error);$('pendingRequests').textContent='Não foi possível atualizar os pedidos. Tente novamente.';}
+  finally {refreshingRequests=false;}
+}
 function listenRequests() {
   if(stopRequests)return;
   $('ownerPanel').classList.remove('hidden'); $('atlasCode').value=ownerUid;
-  stopRequests=cloud.watchRequests(ownerUid,requests=>{
-    $('pendingRequests').innerHTML=requests.length?requests.map(request=>`<div class="pair-request"><span>Código <b>${escapeHtml(request.code)}</b></span><button type="button" data-approve="${escapeHtml(request.uid)}">Autorizar aparelho</button></div>`).join(''):'Nenhum aparelho aguardando.';
-  },error=>console.error('Pedidos de vínculo',error));
+  const stopWatch=cloud.watchRequests(ownerUid,renderRequests,error=>console.error('Pedidos de vínculo',error));
+  const timer=setInterval(()=>{if($('dataDialog').open && !document.hidden)refreshRequests();},10000);
+  stopRequests=()=>{stopWatch();clearInterval(timer);};
+  refreshRequests();
 }
 async function startCloud() {
   try {
-    cloud=await import('./cloud-bundle.js'); deviceUid=await cloud.identity(); ownerUid=cloud.ownerFor(deviceUid);
+    cloud=await import('./cloud-bundle.js?v=2'); deviceUid=await cloud.identity(); ownerUid=cloud.ownerFor(deviceUid);
     $('atlasCode').value=ownerUid;
     if (ownerUid===deviceUid) {
       await connectCloud(); listenRequests();
@@ -143,7 +154,7 @@ async function init() {
   document.addEventListener('click',event=>{ const go=event.target.closest('[data-go]'); if(go){navigate(go.dataset.go);return;} const nav=event.target.closest('[data-view]'); if(nav){navigate(nav.dataset.view);return;} const country=event.target.closest('[data-country]'); if(country){openCountry(country.dataset.country);return;} const region=event.target.closest('[data-region]'); if(region){currentRegion=region.dataset.region;renderExplore();return;} const list=event.target.closest('[data-list]'); if(list){currentList=list.dataset.list;currentTier='all';renderLists();return;} const tier=event.target.closest('[data-tier]'); if(tier){currentTier=tier.dataset.tier;renderLists();return;} const status=event.target.closest('[data-status]'); if(status)setStatus(status.dataset.status); });
   document.addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)&&event.target.matches('[data-country][role="button"]')){event.preventDefault();openCountry(event.target.dataset.country);}});
   $('searchInput').addEventListener('input',renderExplore); $('statusFilter').addEventListener('change',renderExplore); $('countryForm').addEventListener('submit',saveCountry);
-  $('dataButton').addEventListener('click',()=>$('dataDialog').showModal()); $('closeData').addEventListener('click',()=>$('dataDialog').close()); $('exportButton').addEventListener('click',exportData); $('importInput').addEventListener('change',e=>e.target.files[0]&&importData(e.target.files[0]));
+  $('dataButton').addEventListener('click',()=>{$('dataDialog').showModal();if(stopRequests)refreshRequests();}); $('closeData').addEventListener('click',()=>$('dataDialog').close()); $('exportButton').addEventListener('click',exportData); $('importInput').addEventListener('change',e=>e.target.files[0]&&importData(e.target.files[0]));
   $('joinButton').addEventListener('click',requestPairing);
   $('copyCode').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('atlasCode').value);toast('Código copiado.');}catch{toast('Selecione e copie o código.');}});
   $('pendingRequests').addEventListener('click',event=>{const button=event.target.closest('[data-approve]');if(button)approvePairing(button.dataset.approve);});

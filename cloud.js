@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously } from 'firebase/auth';
-import { getFirestore, collection, doc, getDocs, onSnapshot, setDoc, deleteDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDocs, getDocsFromServer, onSnapshot, setDoc, deleteDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 
 const app = initializeApp({
   apiKey: 'AIzaSyBSjCjlaS6y6HL4rgyX9witxCiKcmi8y30',
@@ -67,6 +67,10 @@ export async function requestAccess(owner, uid, code) {
   if (!/^[A-Za-z0-9]{20,40}$/.test(owner) || owner === uid) throw Error('Código do atlas inválido.');
   await setDoc(doc(requests(owner), uid), { code, createdAt: serverTimestamp() });
   setOwner(owner);
+}
+export async function listRequests(owner) {
+  const snapshot = await getDocsFromServer(requests(owner));
+  return snapshot.docs.map(d => ({ uid: d.id, ...d.data() }));
 }
 export function watchRequests(owner, next, error) {
   return onSnapshot(requests(owner), snapshot => next(snapshot.docs.map(d => ({ uid: d.id, ...d.data() }))), error);
