@@ -43,7 +43,7 @@ async function toggleAccount() {
   accountBusy = true; $('accountButton').disabled = true;
   try { if (activeUid) await cloud.logout(); else await cloud.login(); }
   catch (error) { console.error('Erro no login', error); toast('Não foi possível entrar com Google. Tente novamente.'); }
-  finally { accountBusy = false; $('accountButton').disabled = false; }
+  finally { if (!activeUid) { accountBusy = false; $('accountButton').disabled = false; } }
 }
 function toast(message) { const old = document.querySelector('.toast'); if (old) old.remove(); const el = document.createElement('div'); el.className = 'toast'; el.setAttribute('role','status'); el.textContent = message; document.body.append(el); setTimeout(() => el.remove(), 3200); }
 function navigate(view) { currentView = view; document.querySelectorAll('.view').forEach(el => el.classList.toggle('hidden', el.id !== `${view}View`)); document.querySelectorAll('[data-view]').forEach(el => el.classList.toggle('active', el.dataset.view === view)); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
