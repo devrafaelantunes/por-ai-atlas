@@ -3,12 +3,17 @@
   "private": true,
   "scripts": {
     "generate:map": "node generate-map.mjs",
-    "check": "node --check app.js && node generate-map.mjs"
+    "check": "node --check app.js && node --check cloud.js && node generate-map.mjs && npm run build",
+    "build": "esbuild cloud.js --bundle --format=esm --target=safari16 --minify --outfile=cloud-bundle.js"
   },
   "devDependencies": {
     "d3-geo": "^3.1.1",
     "topojson-client": "^3.1.0",
     "world-atlas": "^2.0.2",
     "world-countries": "^5.1.0"
+  },
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "firebase": "^13.1.0"
   }
 }

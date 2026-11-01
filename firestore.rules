@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function linked(owner) {
+      return signedIn() && (request.auth.uid == owner ||
+        exists(/databases/$(database)/documents/atlases/$(owner)/members/$(request.auth.uid)));
+    }
+    match /users/{userId}/countries/{countryId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+    match /users/{userId}/atlas/{atlasId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+    match /atlases/{owner}/countries/{code} {
+      allow read: if linked(owner);
+      allow write: if linked(owner) && code.matches('[A-Z]{2}');
+    }
+    match /atlases/{owner}/requests/{requester} {
+      allow read: if linked(owner) || (signedIn() && request.auth.uid == requester);
+      allow create, update: if signedIn() && request.auth.uid == requester && requester != owner &&
+        request.resource.data.keys().hasOnly(['code', 'createdAt']) &&
+        request.resource.data.code is string && request.resource.data.code.matches('[0-9]{6}') &&
+        request.resource.data.createdAt == request.time;
+      allow delete: if linked(owner) || (signedIn() && request.auth.uid == requester);
+    }
+    match /atlases/{owner}/members/{member} {
+      allow read: if linked(owner) || (signedIn() && request.auth.uid == member);
+      allow create: if linked(owner) && member != owner &&
+        exists(/databases/$(database)/documents/atlases/$(owner)/requests/$(member)) &&
+        request.resource.data.keys().hasOnly(['joinedAt']) && request.resource.data.joinedAt == request.time;
+      allow delete: if linked(owner);
+    }
+  }
+}
