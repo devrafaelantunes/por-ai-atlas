@@ -3,12 +3,48 @@ const REGIONS = { Europe: 'Europa', Asia: 'Ásia', Africa: 'África', Americas: 
 const REGION_ICONS = { Europe: '✦', Asia: '◈', Africa: '☼', Americas: '◉', Oceania: '〰' };
 const TIERS = { muito: '🔥 Quero muito!', 'um-dia': '🌤️ Um dia eu vou', 'se-der': '🍃 Se der certo' };
 let countries = [], entries = {}, currentView = 'home', currentRegion = 'all', currentList = 'visited', currentTier = 'all', selectedCountry = null, selectedStatus = 'none';
+let cloud = null, activeUid = null, unsubscribeCountries = null, accountBusy = false;
 const $ = id => document.getElementById(id);
 const clean = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const entry = code => entries[code] || { status: 'none', tier: 'muito', note: '', year: '' };
 function loadEntries() { try { const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch { return {}; } }
 function persist() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); return true; } catch { toast('Não foi possível salvar neste navegador. Exporte seus dados.'); return false; } }
+function accountStatus(text) { $('accountStatus').textContent = text; $('accountButton').textContent = activeUid ? 'Sair da conta' : 'Entrar com Google'; $('accountButton').disabled = accountBusy; }
+async function connectAccount(user) {
+  if (unsubscribeCountries) { unsubscribeCountries(); unsubscribeCountries = null; }
+  activeUid = user?.uid || null;
+  if (!user) { accountBusy = false; entries = loadEntries(); accountStatus('Neste navegador · entre para sincronizar'); render(); return; }
+  accountBusy = true; accountStatus('Conectando e preservando suas marcações…');
+  const uid = user.uid;
+  try {
+    const remote = await cloud.readCountries(uid);
+    if (activeUid !== uid) return;
+    const local = loadEntries();
+    const missing = Object.fromEntries(Object.entries(local).filter(([code, item]) => countries.some(c => c.code === code) && ['visited','dream'].includes(item?.status) && !remote[code]));
+    if (Object.keys(missing).length) await cloud.replaceCountriesRemote(uid, {}, missing);
+    if (Object.keys(local).length) {
+      const backupKey = `${STORAGE_KEY}-backup-before-sync-${uid}`;
+      if (!localStorage.getItem(backupKey)) localStorage.setItem(backupKey, JSON.stringify(local));
+      localStorage.setItem(STORAGE_KEY, '{}');
+    }
+    if (activeUid !== uid) return;
+    entries = { ...remote, ...missing }; render();
+    unsubscribeCountries = cloud.watchCountries(uid, latest => {
+      if (activeUid !== uid) return;
+      entries = latest; render(); accountStatus(`Sincronizado com ${user.email || 'sua conta Google'}`);
+    }, error => { console.error('Erro de sincronização', error); accountStatus('Falha de sincronização · tente recarregar'); });
+    accountStatus(`Sincronizado com ${user.email || 'sua conta Google'}`);
+  } catch (error) { console.error('Erro ao conectar atlas', error); accountStatus('Não foi possível sincronizar · tente novamente'); toast('A nuvem não está acessível. Suas marcações locais foram preservadas.'); }
+  finally { accountBusy = false; $('accountButton').disabled = false; }
+}
+async function toggleAccount() {
+  if (!cloud || accountBusy) return;
+  accountBusy = true; $('accountButton').disabled = true;
+  try { if (activeUid) await cloud.logout(); else await cloud.login(); }
+  catch (error) { console.error('Erro no login', error); toast('Não foi possível entrar com Google. Tente novamente.'); }
+  finally { accountBusy = false; $('accountButton').disabled = false; }
+}
 function toast(message) { const old = document.querySelector('.toast'); if (old) old.remove(); const el = document.createElement('div'); el.className = 'toast'; el.setAttribute('role','status'); el.textContent = message; document.body.append(el); setTimeout(() => el.remove(), 3200); }
 function navigate(view) { currentView = view; document.querySelectorAll('.view').forEach(el => el.classList.toggle('hidden', el.id !== `${view}View`)); document.querySelectorAll('[data-view]').forEach(el => el.classList.toggle('active', el.dataset.view === view)); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 function render() { if (currentView === 'home') renderHome(); if (currentView === 'explore') renderExplore(); if (currentView === 'map') renderMap(); if (currentView === 'lists') renderLists(); }
@@ -60,9 +96,17 @@ function renderLists() {
 function listRow(c) { const e = entry(c.code); return `<div class="list-row" data-country="${c.code}" role="button" tabindex="0"><span class="flag">${c.flag}</span><div class="info"><b>${escapeHtml(c.name)}</b><small>${REGIONS[c.region]}${e.year&&e.status==='visited'?' · '+escapeHtml(e.year):''}${e.note?' · '+escapeHtml(e.note):''}</small></div><span class="row-end">↗</span></div>`; }
 function setStatus(status) { selectedStatus = status; document.querySelectorAll('[data-status]').forEach(el => el.classList.toggle('selected',el.dataset.status===status)); $('tierSection').classList.toggle('hidden',status!=='dream'); $('yearSection').classList.toggle('hidden',status!=='visited'); $('noteSection').classList.toggle('hidden',status==='none'); }
 function openCountry(code) { const c = countries.find(x=>x.code===code); if (!c) return; selectedCountry=c; const e=entry(code); $('dialogFlag').textContent=c.flag; $('dialogRegion').textContent=REGIONS[c.region]+' · '+c.subregion; $('dialogName').textContent=c.name; $('dialogSub').textContent=c.capital?`Capital: ${c.capital}`:'Um destino para descobrir.'; $('tierSelect').value=TIERS[e.tier]?e.tier:'muito'; $('yearInput').value=e.year||''; $('noteInput').value=e.note||''; setStatus(['visited','dream'].includes(e.status)?e.status:'none'); $('countryDialog').showModal(); }
-function saveCountry(event) { event.preventDefault(); if (!selectedCountry) return; const code=selectedCountry.code; if (selectedStatus==='none') delete entries[code]; else { const year=$('yearInput').value.trim(); if (selectedStatus==='visited' && year && (Number(year)<1900||Number(year)>2100)) { toast('Digite um ano entre 1900 e 2100.'); return; } entries[code]={status:selectedStatus,tier:selectedStatus==='dream'?$('tierSelect').value:'muito',year:selectedStatus==='visited'?year:'',note:$('noteInput').value.trim().slice(0,500)}; } persist(); $('countryDialog').close(); render(); toast(selectedStatus==='none'?'País removido da sua jornada.':'Seu atlas foi atualizado!'); }
+async function saveCountry(event) { event.preventDefault(); if (!selectedCountry || accountBusy) return; const code=selectedCountry.code, before=entries[code]; let next=null; if (selectedStatus!=='none') { const year=$('yearInput').value.trim(); if (selectedStatus==='visited' && year && (Number(year)<1900||Number(year)>2100)) { toast('Digite um ano entre 1900 e 2100.'); return; } next={status:selectedStatus,tier:selectedStatus==='dream'?$('tierSelect').value:'muito',year:selectedStatus==='visited'?year:'',note:$('noteInput').value.trim().slice(0,500)}; }
+  $('saveCountry').disabled=true;
+  try { if (activeUid) await cloud.saveCountryRemote(activeUid,code,next); else { if(next)entries[code]=next;else delete entries[code]; if(!persist())throw Error('local'); } if(next)entries[code]=next;else delete entries[code]; $('countryDialog').close(); render(); toast(selectedStatus==='none'?'País removido da sua jornada.':activeUid?'Salvo e sincronizado!':'Salvo neste navegador. Entre para sincronizar.'); }
+  catch(error) { console.error('Erro ao salvar país',error); if(before)entries[code]=before;else delete entries[code]; toast('Não foi possível salvar. Tente novamente.'); }
+  finally { $('saveCountry').disabled=false; }
+}
 function exportData() { const blob=new Blob([JSON.stringify({app:'por-ai',version:1,exportedAt:new Date().toISOString(),entries},null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='por-ai-meu-atlas.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
-async function importData(file) { try { if (file.size>2_000_000) throw Error('Arquivo grande demais.'); const data=JSON.parse(await file.text()); if (data.app!=='por-ai'||data.version!==1||!data.entries||typeof data.entries!=='object'||Array.isArray(data.entries)) throw Error('Este arquivo não é um backup válido do por aí.'); const validCodes=new Set(countries.map(c=>c.code)), next={}; for (const [code,item] of Object.entries(data.entries)) { if (!validCodes.has(code)||!item||!['visited','dream'].includes(item.status)) continue; next[code]={status:item.status,tier:TIERS[item.tier]?item.tier:'muito',year:/^(19|20)\d{2}$/.test(String(item.year||''))?String(item.year):'',note:String(item.note||'').slice(0,500)}; } if (!confirm(`Importar ${Object.keys(next).length} países? Isso substitui suas marcações atuais neste dispositivo.`)) return; entries=next; persist(); $('dataDialog').close(); render(); toast('Seu atlas foi importado!'); } catch(err) { toast(err.message||'Não foi possível importar o arquivo.'); } finally { $('importInput').value=''; } }
+async function importData(file) { try { if (accountBusy) throw Error('Aguarde a sincronização terminar.'); if (file.size>2_000_000) throw Error('Arquivo grande demais.'); const data=JSON.parse(await file.text()); if (data.app!=='por-ai'||data.version!==1||!data.entries||typeof data.entries!=='object'||Array.isArray(data.entries)) throw Error('Este arquivo não é um backup válido do por aí.'); const validCodes=new Set(countries.map(c=>c.code)), next={}; for (const [code,item] of Object.entries(data.entries)) { if (!validCodes.has(code)||!item||!['visited','dream'].includes(item.status)) continue; next[code]={status:item.status,tier:TIERS[item.tier]?item.tier:'muito',year:/^(19|20)\d{2}$/.test(String(item.year||''))?String(item.year):'',note:String(item.note||'').slice(0,500)}; } if (!confirm(`Importar ${Object.keys(next).length} países? Isso substitui suas marcações ${activeUid?'na sua conta, em todos os dispositivos':'neste dispositivo'}.`)) return;
+    if (activeUid) await cloud.replaceCountriesRemote(activeUid,entries,next);
+    entries=next; if(!activeUid)persist(); $('dataDialog').close(); render(); toast(activeUid?'Atlas importado e sincronizado!':'Seu atlas foi importado neste navegador!');
+  } catch(err) { console.error('Erro ao importar',err); toast(err.message||'Não foi possível importar o arquivo.'); } finally { $('importInput').value=''; } }
 async function init() {
   entries=loadEntries(); initMapEvents();
   try { const response=await fetch('countries.json'); if (!response.ok) throw Error('Falha ao carregar países'); countries=await response.json(); if (!Array.isArray(countries)||countries.length!==195) throw Error('Lista incompleta'); render(); }
@@ -71,5 +115,12 @@ async function init() {
   document.addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)&&event.target.matches('[data-country][role="button"]')){event.preventDefault();openCountry(event.target.dataset.country);}});
   $('searchInput').addEventListener('input',renderExplore); $('statusFilter').addEventListener('change',renderExplore); $('countryForm').addEventListener('submit',saveCountry);
   $('dataButton').addEventListener('click',()=>$('dataDialog').showModal()); $('closeData').addEventListener('click',()=>$('dataDialog').close()); $('exportButton').addEventListener('click',exportData); $('importInput').addEventListener('change',e=>e.target.files[0]&&importData(e.target.files[0]));
+  $('accountButton').addEventListener('click',toggleAccount);
+  try {
+    cloud = await import('./cloud-bundle.js');
+    await cloud.finishRedirect();
+    accountStatus('Verificando sua conta…');
+    cloud.observeUser(user => connectAccount(user));
+  } catch(error) { console.error('Firebase indisponível',error); accountStatus('Sincronização indisponível · seus dados locais continuam aqui'); $('accountButton').disabled=true; }
 }
 init();
